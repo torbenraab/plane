@@ -11,8 +11,9 @@ import {
 import { AuthenticationMethodCard } from "@/components/authentication";
 import { OpenIDConnectConfiguration } from "@/components/authentication/oidc-config";
 // helpers
-import { UpgradeButton } from "@/components/common/upgrade-button";
 import { getBaseAuthenticationModes } from "@/helpers/authentication.helper";
+// plane admin components
+import { UpgradeButton } from "@/plane-admin/components/common";
 // images
 import OIDCLogo from "@/public/logos/oidc-logo.svg";
 import SAMLLogo from "@/public/logos/saml-logo.svg";
