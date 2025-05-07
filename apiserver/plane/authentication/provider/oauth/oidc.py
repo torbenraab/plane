@@ -6,6 +6,7 @@ from base64 import b64encode
 
 import pytz
 import requests
+import logging
 
 # Module imports
 from plane.authentication.adapter.oauth import OauthAdapter
@@ -48,6 +49,17 @@ class OpenIDConnectProvider(OauthAdapter):
             ]
         )
 
+        WEB_URL = get_configuration_value([{
+            "key": "WEB_URL",
+            "default": os.environ.get("WEB_URL"),
+        }])
+
+        OIDC_IDP_CA_CERT = get_configuration_value([{
+            "key": "OIDC_IDP_CA_CERT",
+            "default": os.environ.get("OIDC_IDP_CA_CERT"),
+        }])
+
+        self.idp_ca_cert = OIDC_IDP_CA_CERT[0]
         self.token_url = OIDC_URL_TOKEN
         self.userinfo_url = OIDC_URL_USERINFO
 
@@ -59,8 +71,8 @@ class OpenIDConnectProvider(OauthAdapter):
 
         client_id = OIDC_CLIENT_ID
         client_secret = OIDC_CLIENT_SECRET
-
-        redirect_uri = f"""{"https" if request.is_secure() else "http"}://{request.get_host()}/auth/oidc/callback/"""
+        is_secure = WEB_URL[0].startswith("https")
+        redirect_uri = f"""{"https" if is_secure else "http"}://{request.get_host()}/auth/oidc/callback/"""
         url_params = {
             "client_id": client_id,
             "redirect_uri": redirect_uri,
@@ -123,6 +135,42 @@ class OpenIDConnectProvider(OauthAdapter):
                 "id_token": token_response.get("id_token", ""),
             }
         )
+
+    def get_user_token(self, data, headers=None):
+        try:
+            headers = headers or {}
+            response = requests.post(
+                    self.get_token_url(), data=data, headers=headers, verify=self.idp_ca_cert
+                )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as ex:
+            logger = logging.getLogger("plane")
+            logger.error("Error getting token from oidc auth provider: {}".format(ex))
+            code = self.authentication_error_code()
+            raise AuthenticationException(
+                error_code=AUTHENTICATION_ERROR_CODES[code],
+                error_message=str(code),
+            )
+
+
+    def get_user_response(self):
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.token_data.get('access_token')}"
+            }
+            response = requests.get(self.get_user_info_url(), headers=headers,  verify=self.idp_ca_cert)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as ex:
+            logger = logging.getLogger("plane")
+            logger.error("Error getting user info from oidc auth provider: {}".format(ex))
+            code = self.authentication_error_code()
+            raise AuthenticationException(
+                error_code=AUTHENTICATION_ERROR_CODES[code],
+                error_message=str(code),
+            )
+
 
     def set_user_data(self):
         user_info_response = self.get_user_response()
